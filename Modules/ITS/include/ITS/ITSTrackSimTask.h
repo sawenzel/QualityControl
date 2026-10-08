@@ -29,6 +29,7 @@
 #include "TGeoGlobalMagField.h"
 #include "DataFormatsITS/TrackITS.h"
 #include <TEfficiency.h>
+#include <unordered_map>
 class TH1D;
 class TH2D;
 
@@ -70,7 +71,7 @@ class ITSTrackSimTask : public TaskInterface
   void addObject(TObject* aObject);
   void createAllHistos();
 
-  std::vector<std::vector<InfoStruct>> info;
+  std::vector<std::unordered_map<int, InfoStruct>> info; // per event: MC track ID -> info, only for the tracks with a cluster or a reconstructed track
   std::vector<TObject*> mPublishedObjects;
 
   TEfficiency *hEfficiency_pt, *hEfficiency_phi, *hEfficiency_eta, *hEfficiency_z, *hEfficiency_r;

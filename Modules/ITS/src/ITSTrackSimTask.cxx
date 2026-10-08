@@ -143,13 +143,9 @@ void ITSTrackSimTask::monitorData(o2::framework::ProcessingContext& ctx)
   ILOG(Debug, Devel) << "START DOING QC General" << ENDM;
   o2::steer::MCKinematicsReader reader(mCollisionsContextPath.c_str());
   info.resize(reader.getNEvents(0));
-  for (int i = 0; i < reader.getNEvents(0); ++i) {
-    std::vector<MCTrack> const& mcArr = reader.getTracks(i);
-    info[i].resize(mcArr.size());
-  }
 
   auto clusArr = ctx.inputs().get<gsl::span<o2::itsmft::CompClusterExt>>("compclus"); // used to get hit information
-  auto clusLabArr = ctx.inputs().get<const dataformats::MCTruthContainer<MCCompLabel>*>("mcclustruth").release();
+  auto clusLabArr = ctx.inputs().get<const dataformats::MCTruthContainer<MCCompLabel>*>("mcclustruth");
 
   for (int iCluster = 0; iCluster < clusArr.size(); iCluster++) {
 
@@ -189,26 +185,26 @@ void ITSTrackSimTask::monitorData(o2::framework::ProcessingContext& ctx)
     std::vector<MCTrack> const& mcArr = reader.getTracks(i);
     auto mcHeader = reader.getMCEventHeader(0, i); // SourceID=0 for ITS
 
-    for (int mc = 0; mc < mcArr.size(); mc++) {
+    for (auto& [mc, trackInfo] : info[i]) {
+      trackInfo.isFilled = false;
+      if (trackInfo.clusters != 0b1111111 || static_cast<size_t>(mc) >= mcArr.size())
+        continue;
       const auto& mcTrack = (mcArr)[mc];
 
-      info[i][mc].isFilled = false;
       if (mcTrack.Vx() * mcTrack.Vx() + mcTrack.Vy() * mcTrack.Vy() > 1)
         continue;
       if (TMath::Abs(mcTrack.GetPdgCode()) != 211)
         continue; // Select pions
       if (TMath::Abs(mcTrack.GetEta()) > 1.2)
         continue;
-      if (info[i][mc].clusters != 0b1111111)
-        continue;
       Double_t distance = sqrt(pow(mcHeader.GetX() - mcTrack.Vx(), 2) + pow(mcHeader.GetY() - mcTrack.Vy(), 2) + pow(mcHeader.GetZ() - mcTrack.Vz(), 2));
-      info[i][mc].isFilled = true;
-      info[i][mc].r = distance;
-      info[i][mc].pt = mcTrack.GetPt();
-      info[i][mc].eta = mcTrack.GetEta();
-      info[i][mc].phi = mcTrack.GetPhi();
-      info[i][mc].z = mcTrack.Vz();
-      info[i][mc].isPrimary = mcTrack.isPrimary();
+      trackInfo.isFilled = true;
+      trackInfo.r = distance;
+      trackInfo.pt = mcTrack.GetPt();
+      trackInfo.eta = mcTrack.GetEta();
+      trackInfo.phi = mcTrack.GetPhi();
+      trackInfo.z = mcTrack.Vz();
+      trackInfo.isPrimary = mcTrack.isPrimary();
       if (mcTrack.isPrimary()) {
         hPrimaryGen_pt->Fill(mcTrack.GetPt());
         // True Generated primaries: denominator of the efficiency plots
@@ -219,6 +215,7 @@ void ITSTrackSimTask::monitorData(o2::framework::ProcessingContext& ctx)
         hDenTrue_z[4]->Fill(mcTrack.Vz());
       }
     }
+    reader.releaseTracksForSourceAndEvent(0, i);
   }
 
   auto trackArr = ctx.inputs().get<gsl::span<o2::its::TrackITS>>("tracks"); // MC Tracks

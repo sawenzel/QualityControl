@@ -30,6 +30,8 @@
 // QualityControl
 #include "QualityControl/TaskInterface.h"
 
+#include <unordered_map>
+
 class TH1D;
 class TH2D;
 
@@ -64,7 +66,7 @@ class QcMFTTrackMCTask : public TaskInterface
   };
 
  private:
-  std::vector<std::vector<InfoStruct>> info;
+  std::vector<std::unordered_map<int, InfoStruct>> info; // per event: MC track ID -> info, only for the tracks with a reconstructed track
 
   std::unique_ptr<TH1D> hRecoValid_pt = nullptr;
   std::unique_ptr<TH1D> hRecoFake_pt = nullptr;

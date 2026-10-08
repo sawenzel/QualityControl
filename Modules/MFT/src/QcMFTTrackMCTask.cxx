@@ -123,9 +123,16 @@ void QcMFTTrackMCTask::monitorData(o2::framework::ProcessingContext& ctx)
   ILOG(Debug, Devel) << "START DOING QC General" << ENDM;
   o2::steer::MCKinematicsReader reader(mCollisionsContextPath.c_str());
   info.resize(reader.getNEvents(0));
-  for (int i = 0; i < reader.getNEvents(0); ++i) {
-    std::vector<MCTrack> const& mcArr = reader.getTracks(i);
-    info[i].resize(mcArr.size());
+
+  auto trackArr = ctx.inputs().get<gsl::span<o2::mft::TrackMFT>>("tracks"); // MFT Tracks
+  auto MCTruth = ctx.inputs().get<gsl::span<o2::MCCompLabel>>("mctruth");   // MC track label, contains info about EventID, TrackID, SourceID etc
+
+  // only the MC tracks with a reconstructed track get an entry
+  for (int itrack = 0; itrack < trackArr.size(); itrack++) {
+    const auto& MCinfo = MCTruth[itrack];
+    if (!MCinfo.isNoise()) {
+      info[MCinfo.getEventID()].try_emplace(MCinfo.getTrackID());
+    }
   }
 
   for (int i = 0; i < reader.getNEvents(0); ++i) {
@@ -133,12 +140,6 @@ void QcMFTTrackMCTask::monitorData(o2::framework::ProcessingContext& ctx)
     auto mcHeader = reader.getMCEventHeader(0, i);
     for (int mc = 0; mc < mcArr.size(); mc++) {
       const auto& mcTrack = (mcArr)[mc];
-      info[i][mc].isFilled = false;
-      info[i][mc].isFilled = true;
-      info[i][mc].pt = mcTrack.GetPt();
-      info[i][mc].eta = mcTrack.GetEta();
-      info[i][mc].phi = TMath::ATan2(mcTrack.Py(), mcTrack.Px());
-      info[i][mc].isPrimary = mcTrack.isPrimary();
       if (mcTrack.isPrimary()) {
         hPrimaryGen_pt->Fill(mcTrack.GetPt());
       }
@@ -146,10 +147,19 @@ void QcMFTTrackMCTask::monitorData(o2::framework::ProcessingContext& ctx)
       hTrue_eta->Fill(mcTrack.GetEta());
       hTrue_phi->Fill(TMath::ATan2(mcTrack.Py(), mcTrack.Px()));
     }
+    for (auto& [mc, trackInfo] : info[i]) {
+      if (static_cast<size_t>(mc) >= mcArr.size()) {
+        continue;
+      }
+      const auto& mcTrack = mcArr[mc];
+      trackInfo.isFilled = true;
+      trackInfo.pt = mcTrack.GetPt();
+      trackInfo.eta = mcTrack.GetEta();
+      trackInfo.phi = TMath::ATan2(mcTrack.Py(), mcTrack.Px());
+      trackInfo.isPrimary = mcTrack.isPrimary();
+    }
+    reader.releaseTracksForSourceAndEvent(0, i);
   }
-
-  auto trackArr = ctx.inputs().get<gsl::span<o2::mft::TrackMFT>>("tracks"); // MFT Tracks
-  auto MCTruth = ctx.inputs().get<gsl::span<o2::MCCompLabel>>("mctruth");   // MC track label, contains info about EventID, TrackID, SourceID etc
 
   for (int itrack = 0; itrack < trackArr.size(); itrack++) {
     const auto& track = trackArr[itrack];
